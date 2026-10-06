@@ -1,0 +1,23 @@
+================================================================================
+índice postural
+================================================================================
+implementar no programa uma abertura de arquivo no tipo imagem.
+quando carregar a imagem e aparecer na interface, seja possível utilizar a 
+operação de ip(índice postural)
+
+================================================================================
+interface da operação
+================================================================================
+uma linha vertical padrão (vermelho) de ponta a ponta na imagem.
+eixos para ser segurados e soltados com o mouse, com os seus nomes (ex. quadril,
+peito, pé...).
+
+índice postural adaptado.
+
+================================================================================
+cálculo
+================================================================================
+cada eixo tem um calculo diferente em relação a linha vermelha vertical (ex.
+a distância entre o quadril e a linha vertical dará um numero, a distancia entre
+o pé e a linha vertical)
+com todos esses pontos, colocar em uma forma e adquirir o ip.

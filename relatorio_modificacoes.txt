@@ -1,0 +1,159 @@
+================================================================================
+RELATÓRIO DE MODIFICAÇÕES — Auto-preenchimento do Nome da Nova Variável
+Data: 2026-08-05
+================================================================================
+
+OBJETIVO
+--------
+Melhorar a usabilidade da aba "Operações" do software, eliminando a obrigatoriedade
+de digitação manual do nome da nova variável. O nome agora é PRÉ-PREENCHIDO com um
+nome padrão gerado dinamicamente a partir do tipo de operação escolhida, mas o
+campo continua TOTALMENTE EDITÁVEL — o usuário pode apagar e digitar um nome
+customizado quando quiser.
+
+ATUALIZAÇÃO (2026-08-05): o nome do arquivo foi REMOVIDO do nome sugerido. O nome
+passa a ser composto APENAS pelo conteúdo entre parênteses / descrição da operação
+(por exemplo: "(Forca, +, 1.5)" em vez de "biomec, (Forca, +, 1.5)").
+
+================================================================================
+ARQUIVO MODIFICADO
+================================================================================
+- src/ui/dialogs_operacoes.py
+
+================================================================================
+REGRAS DE FORMATAÇÃO DO NOME PADRÃO (versão atualizada)
+================================================================================
+O nome é composto APENAS pelo conteúdo entre parênteses / descrição da operação,
+sem o nome do arquivo e sem o prefixo "[Arquivo], ":
+
+    1. Aritmética Básica .................. (variável A, operação, valor B)
+    2. Trigonometria ...................... (variável, função)
+    3. Cálculo e Funções Escalares ........ (variável, variável x de referência, operação)
+    4. Definir Ângulos .................... modo de cálculo ângulo relativo
+                                          OU ângulo entre vetores
+
+================================================================================
+DETALHAMENTO DAS ALTERAÇÕES POR CLASSE
+================================================================================
+
+[1] JanelaManipularVariaveis (Aritmética Básica)
+    - Adicionada flag de instância self._nome_editado_pelo_usuario = False no __init__.
+    - Adicionadas novas conexões de sinais que disparam a atualização automática do
+      nome padrão: combo_var_a, combo_operacao, combo_var_b, spin_constante e
+      radio_variavel.
+    - Adicionada conexão do sinal input_nome.textEdited -> _usuario_editou_nome,
+      para que QUALQUER edição manual do usuário (digitar/apagar) trave a
+      regeneração automática a partir desse ponto.
+    - Implementado método _atualizar_nome_sugerido():
+        * Formato gerado: "({var_a}, {op}, {var_b})"
+          onde op ∈ {+, -, *, /} e var_b é variável ou constante conforme o radio.
+        * Respeita a flag: se o usuário já editou, NÃO sobrescreve.
+    - Implementado método _usuario_editou_nome() que ativa a flag.
+    - Em _atualizar_colunas() o reset da flag foi mantido (ao trocar arquivo o
+      nome volta a seguir a sugestão automática) seguido da chamada explícita a
+      _atualizar_nome_sugerido() para regeneração imediata.
+
+[2] JanelaTrigonometria (Trigonometria) — refino para seguir formato canônico
+    - A classe JÁ POSSUÍA a estrutura de auto-preenchimento (flag, _atualizar_nome_sugerido,
+      _usuario_editou_nome), porém o nome era gerado SEM o nome do arquivo
+      (formato antigo: "sin(variavel)") — após o ajuste desta versão, esse
+      formato é EXATAMENTE o desejado.
+    - _atualizar_nome_sugerido() foi ATUALIZADO para remover qualquer referência
+      ao nome do arquivo:
+        * Formato gerado: "({var}, {prefixo})"
+          onde prefixo ∈ {sin, cos, tan}.
+    - Mantido reset da flag em _atualizar_colunas() (ao trocar arquivo).
+
+[3] JanelaCalculoEscalar (Cálculo e Funções Escalares)
+    - Adicionada flag de instância self._nome_editado_pelo_usuario = False no __init__.
+    - Adicionadas novas conexões de sinais: combo_variavel, combo_variavel_x e
+      combo_operacao -> _atualizar_nome_sugerido.
+    - Adicionada conexão input_nome.textEdited -> _usuario_editou_nome.
+    - Implementado método _atualizar_nome_sugerido():
+        * Para integral / derivada_1 / derivada_2 (operações que exigem X):
+            Formato: "({var}, {var_x}, {op_label})"
+        * Para as demais operações (modulo, inverso, raiz_quadrada, unwrap_continuo):
+            Formato: "({var}, , {op_label})"
+          (campo variável x fica vazio, conforme o formato solicitado "(variável,
+          variável x de referência, operação)").
+    - Implementado método _usuario_editou_nome() que ativa a flag.
+    - Em _atualizar_colunas() o reset da flag foi mantido seguido da chamada
+      a _atualizar_nome_sugerido() para regeneração imediata ao trocar arquivo.
+
+[4] JanelaDefinirAngulos (Definir Ângulos)
+    - Adicionada flag de instância self._nome_editado_pelo_usuario = False no __init__.
+    - Adicionadas conexões radio_relativo.toggled e radio_vetores.toggled ->
+      _atualizar_nome_sugerido, para que o texto mude imediatamente ao alternar
+      entre os modos.
+    - Adicionada conexão input_nome.textEdited -> _usuario_editou_nome.
+    - Implementado método _atualizar_nome_sugerido():
+        * Modo "relativo" -> "modo de cálculo ângulo relativo"
+        * Modo "vetores" -> "ângulo entre vetores"
+    - Implementado método _usuario_editou_nome() que ativa a flag.
+    - Em _atualizar_pontos_3d() o reset da flag foi mantido seguido da chamada
+      a _atualizar_nome_sugerido() ao trocar arquivo.
+    - Chamada explícita a _atualizar_nome_sugerido() adicionada no __init__
+      para garantir o nome já preenchido na primeira abertura.
+
+================================================================================
+LÓGICA DE COMPORTAMENTO IMPLEMENTADA
+================================================================================
+1. Ao abrir qualquer das 4 janelas (ou ao trocar o arquivo selecionado), o campo
+   "Nome da Nova Variável" é automaticamente preenchido com o nome padrão derivado
+   APENAS do tipo de operação + parâmetros escolhidos (sem nome do arquivo).
+
+2. Os sinais que regeram o nome são:
+   - Mudança de qualquer parâmetro da operação (combos de variáveis, operação,
+     radio buttons, spin de constante)
+   - Troca do modo (em Definir Ângulos)
+
+3. Edição manual:
+   - O sinal textEdited do QLineEdit é usado (NÃO textChanged) — textEdited só
+     dispara quando o próprio usuário digita/apaga, ignorando mudanças PROGRAMÁTICAS
+     feitas pelo setText. Assim a flag NÃO é ativada quando o código regenera o nome.
+   - Uma vez que o usuário edita o campo manualmente, a flag _nome_editado_pelo_usuario
+     fica True e o sistema PARA de sobrescrever o nome nas próximas mudanças de
+     parâmetros. O usuário mantém total controle do nome escolhido.
+
+4. Reset da flag ao trocar de arquivo: ao selecionar um novo arquivo, a flag é
+   zerada e o nome volta a seguir a sugestão automática — comportamento natural
+   de "reset de contexto".
+
+5. Validação existente preservada: as checagens em _validar_e_criar (nome vazio,
+   nome duplicado, etc.) continuam intactas. O nome padrão é apenas um valor
+   inicial mais amigável, sem alterar nenhuma regra de validação.
+
+================================================================================
+FUNÇÕES/MÉTODOS CRIADOS
+================================================================================
+- JanelaManipularVariaveis._atualizar_nome_sugerido() (NOVO)
+- JanelaManipularVariaveis._usuario_editou_nome()     (NOVO)
+- JanelaCalculoEscalar._atualizar_nome_sugerido()    (NOVO)
+- JanelaCalculoEscalar._usuario_editou_nome()        (NOVO)
+- JanelaDefinirAngulos._atualizar_nome_sugerido()    (NOVO)
+- JanelaDefinirAngulos._usuario_editou_nome()        (NOVO)
+
+================================================================================
+FUNÇÕES/MÉTODOS MODIFICADOS
+================================================================================
+- JanelaManipularVariaveis.__init__()           (adição da flag + novas conexões)
+- JanelaManipularVariaveis._atualizar_colunas()  (reset da flag + chamada ao sugerido)
+- JanelaManipularVariaveis._atualizar_nome_sugerido() (removido prefixo do arquivo)
+- JanelaTrigonometria._atualizar_nome_sugerido() (já não usava o nome do arquivo)
+- JanelaCalculoEscalar.__init__()               (adição da flag + novas conexões)
+- JanelaCalculoEscalar._atualizar_colunas()     (reset da flag + chamada ao sugerido)
+- JanelaCalculoEscalar._atualizar_nome_sugerido() (removido prefixo do arquivo)
+- JanelaDefinirAngulos.__init__()               (adição da flag + novas conexões)
+- JanelaDefinirAngulos._atualizar_pontos_3d()   (reset da flag + chamada ao sugerido)
+- JanelaDefinirAngulos._atualizar_nome_sugerido() (removido prefixo do arquivo)
+
+================================================================================
+COMPATIBILIDADE
+================================================================================
+- Nenhuma alteração em assinaturas públicas ou em retornos de métodos existentes.
+- Nenhuma alteração em processamento/operacoes.py — a lógica de cálculo permanece
+  inalterada.
+- O comportamento é puramente aditivo na camada de UI; nenhum teste existente é
+  impactado.
+- A sintaxe do arquivo foi validada com sucesso (ast.parse).
+

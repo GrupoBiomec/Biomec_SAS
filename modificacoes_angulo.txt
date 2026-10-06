@@ -1,0 +1,114 @@
+================================================================
+RELATÓRIO DE MODIFICAÇÕES - Claude (assistente)
+Data: 2026-07-18
+Projeto: Biomec-SAS
+================================================================
+
+OBJETIVO
+--------
+Corrigir bugs e melhorar a plotagem do gráfico padrão gerado
+ao carregar o arquivo `angulo.emt`:
+  1) Eixo Y estava plotando 'Frame' ao invés do ângulo da pelve;
+  2) Label do eixo X estava como "Time [deg]" ao invés de "Time [s]";
+  3) Gráfico decaia bruscamente ao passar de 180° (sem unwrap);
+  4) Garantir que o gráfico seja de dispersão (sem linha contínua).
+
+----------------------------------------------------------------
+ARQUIVOS ALTERADOS
+----------------------------------------------------------------
+
+1) src/ui/main_window.py
+   ----------------------------------------------------------------
+   Função modificada: _criar_e_exibir_grafico_padrao_em(self)
+   ----------------------------------------------------------------
+   - Antes: a função escolhia como 'eixo_y' a PRIMEIRA coluna
+     numérica que não fosse o eixo X. Como a coluna 'Frame' é
+     numérica (int), ela era selecionada, gerando o gráfico
+     "Frame vs Time" ao invés de "Ang pelve vs Time".
+
+   - Correção: adicionado um conjunto `colunas_ignorar` contendo
+     `frame`, `frames`, `item`. A busca agora pula essas colunas
+     ao procurar a primeira grandeza numérica válida para o eixo Y.
+     Resultado: 'Ang pelve' passa a ser corretamente escolhida.
+
+   - A unidade do eixo X estava sendo herdada do `measure_unit`
+     global do cabeçalho (que para o arquivo angulo.emt é "deg",
+     pois a grandeza medida é o ângulo). Isso causava o label
+     "Time [deg]". Agora a unidade do eixo X é determinada
+     explicitamente pelo nome da coluna:
+        * time / tempo / t   -> "s"
+        * frame / frames / item -> "frames"
+        * demais casos -> mapeamento ou measure_unit (fallback)
+     Resultado: label do eixo X passa a ser "Time [s]".
+
+   - NOVA LÓGICA IMPLEMENTADA (unwrap): dentro da mesma função
+     foi adicionado um bloco que detecta se a coluna escolhida
+     para o eixo Y representa um ângulo (nome contém "ang" ou a
+     unidade é deg/graus/º/rad). Quando detectado:
+        a) lê os valores da coluna como Série pandas numérica;
+        b) converte graus -> radianos com np.deg2rad;
+        c) aplica np.unwrap para corrigir a descontinuidade em
+           ±180° (curva passa a crescer continuamente);
+        d) converte de volta para graus com np.rad2deg;
+        e) grava o resultado em uma nova coluna "<nome> [unwrap]"
+           tanto no DataFrame ativo quanto no original, e
+           propaga a unidade;
+        f) usa essa nova coluna como `eixo_y` do gráfico.
+     Isso elimina o salto brusco no gráfico ao cruzar 180°.
+
+   Resumo do diff conceitual (main_window.py):
+     + colunas_ignorar = {"frame", "frames", "item"}
+     + bloco de detecção de "time" para unidade_x = "s"
+     + bloco de numpy.unwrap criando coluna "<col> [unwrap]"
+     ~ usa `col_y_plot` (com sufixo [unwrap]) em nome/título/eixo_y
+
+----------------------------------------------------------------
+
+2) src/processamento/gera_graficos.py
+   ----------------------------------------------------------------
+   Função modificada: plotar_linha(self, dados_x, dados_y, config)
+   ----------------------------------------------------------------
+   - Acrescentada guarda no início da função: se o `config`
+     recebido contiver `tipo == "Dispersão"` OU `symbol`/`simbolo`
+     definidos, a chamada é redirecionada para `plotar_scatter`.
+     Isso garante que mesmo que o chamador use `plotar_linha` por
+     engano quando o usuário pediu dispersão, NENHUMA linha
+     contínua seja desenhada (apenas marcadores).
+
+   Função modificada: plotar_scatter(self, dados_x, dados_y, config)
+   ----------------------------------------------------------------
+   - Reforço explícito do comportamento scatter:
+        * `symbol`/'simbolo' resolvido com fallback para "o"
+          (cobre tanto a chave antiga "simbolo" quanto a nova
+          "symbol" pedida pelo usuário);
+        * adicionado `pen=None` em scatter_kwargs para garantir
+          que o ScatterPlotItem não herde nem desenhe linha
+          alguma;
+        * mantidos `brush` (cor), `size` (tamanho do marcador)
+          e filtragem de pontos não finitos.
+   - Nenhuma linha de conexão entre pontos é desenhada.
+
+   Resumo do diff conceitual (gera_graficos.py):
+     ~ plotar_linha: redireciona para plotar_scatter quando
+       config indica dispersão
+     ~ plotar_scatter: padroniza 'simbolo'/'symbol' -> 'o',
+       adiciona pen=None explícito
+
+----------------------------------------------------------------
+
+LINHAS / FUNÇÕES NOVAS IMPLEMENTADAS
+----------------------------------------------------------------
+- Bloco de aplicação de numpy.unwrap (graus -> rad -> unwrap
+  -> graus) dentro de _criar_e_exibir_grafico_padrao_emt, em
+  src/ui/main_window.py. Cria/atualiza coluna "<col> [unwrap]"
+  no DataFrame ativo e no DataFrame original, propaga a
+  unidade e usa essa coluna como eixo_y do gráfico padrão.
+- Guarda de redirecionamento de plotar_linha para plotar_scatter
+  em src/processamento/gera_graficos.py, baseada em `tipo`,
+  `symbol` ou `simbolo` no config.
+- Reforço explícito de pen=None e symbol="o" em plotar_scatter
+  no mesmo arquivo.
+
+================================================================
+FIM DO RELATÓRIO
+================================================================
